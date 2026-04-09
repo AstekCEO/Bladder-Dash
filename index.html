@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Bladder Dash — by BladderIQ</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1117;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #f0f0f0;
+    overflow: hidden;
+  }
+  canvas {
+    border: 3px solid #ffd640;
+    border-radius: 8px;
+    display: block;
+    image-rendering: pixelated;
+    max-width: 100vw;
+    max-height: 80vh;
+    touch-action: none;
+  }
+  #controls {
+    display: flex;
+    gap: 20px;
+    margin-top: 16px;
+  }
+  .ctrl-btn {
+    width: 70px; height: 70px;
+    border-radius: 50%;
+    border: 3px solid #ffd640;
+    background: rgba(255,214,64,0.2);
+    color: #ffd640;
+    font-size: 32px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.1s;
+  }
+  .ctrl-btn:active { background: rgba(255,214,64,0.5); }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="400" height="600"></canvas>
+<div id="controls">
+  <button class="ctrl-btn" id="btn-left">◀</button>
+  <button class="ctrl-btn" id="btn-right">▶</button>
+</div>
+
+<script>
+// ==================== BLADDER DASH ====================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// --- PALETTE (high-contrast retro) ---
+const COL = {
+  bgTop:     '#0f1628',
+  bgBot:     '#1c2444',
+  lane:      'rgba(255,220,80,0.22)',
+  scanline:  'rgba(0,0,0,0.04)',
+  yellow:    '#ffd640',
+  red:       '#ff5c5c',
+  green:     '#5cff82',
+  cyan:      '#5ce0ff',
+  pink:      '#ff80b0',
+  white:     '#f0f4ff',
+  dimWhite:  'rgba(240,244,255,0.65)',
+  hud:       '#ffffff',
+  overlay:   'rgba(12,18,36,0.92)',
+};
+
+// --- CONFIG ---
+const LANES = 4;
+const LANE_W = canvas.width / LANES;
+const PLAYER_SIZE = 40;
+const ITEM_SIZE = 36;
+const ITEM_SPEED_BASE = 2.5;
+const ITEM_SPEED_INCREMENT = 0.3;
+const SPAWN_INTERVAL_BASE = 700;
+const SPAWN_INTERVAL_MIN = 350;
+const ROUND_DURATION = 30;
+const MAX_ROUNDS = 5;
+
+const GOOD_ITEMS = [
+  { emoji: '💧', label: 'Water', points: 10 },
+  { emoji: '🥦', label: 'Veggies', points: 15 },
+  { emoji: '🏃', label: 'Exercise', points: 12 },
+  { emoji: '🧘', label: 'Relax', points: 8 },
+];
+
+const BAD_ITEMS = [
+  { emoji: '☕', label: 'Caffeine', points: -15 },
+  { emoji: '🍺', label: 'Alcohol', points: -20 },
+  { emoji: '🌶️', label: 'Spicy', points: -12 },
+  { emoji: '🚫', label: 'Holding It', points: -18 },
+];
+
+// --- QR CODE (replace src with your actual QR) ---
+const qrImg = new Image();
+let qrLoaded = false;
+qrImg.onload = () => { qrLoaded = true; };
+// To use your QR: place qr.png in the same folder and uncomment:
+// qrImg.src = 'qr.png';
+// Or paste a data:image/png;base64,... string here:
+qrImg.src = '';
+
+// --- STATE ---
+let state = 'title';
+let playerLane = 1;
+let score = 0;
+let bladderIQ = 50;
+let round = 1;
+let items = [];
+let particles = [];
+let spawnTimer = 0;
+let roundTimer = 0;
+let lastTime = 0;
+let itemSpeed = ITEM_SPEED_BASE;
+let spawnInterval = SPAWN_INTERVAL_BASE;
+let combo = 0;
+let maxCombo = 0;
+let totalCollected = 0;
+let totalDodged = 0;
+let shakeTimer = 0;
+let flashColor = null;
+let flashTimer = 0;
+
+// --- HELPERS ---
+function playerX() { return playerLane * LANE_W + LANE_W / 2; }
+function playerY() { return canvas.height - 80; }
+
+function moveLane(dir) {
+  if (state !== 'playing') return;
+  playerLane = Math.max(0, Math.min(LANES - 1, playerLane + dir));
+}
+
+function spawnItem() {
+  const isGood = Math.random() < 0.55;
+  const pool = isGood ? GOOD_ITEMS : BAD_ITEMS;
+  const item = pool[Math.floor(Math.random() * pool.length)];
+  items.push({
+    ...item,
+    lane: Math.floor(Math.random() * LANES),
+    y: -ITEM_SIZE,
+    good: isGood,
+    collected: false,
+  });
+}
+
+function addParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.5) * 6 - 2,
+      life: 1,
+      color,
+      size: 3 + Math.random() * 4,
+    });
+  }
+}
+
+// --- INPUT ---
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') moveLane(-1);
+  if (e.key === 'ArrowRight') moveLane(1);
+  if (e.key === 'Enter' || e.key === ' ') handleAction();
+});
+
+document.getElementById('btn-left').addEventListener('pointerdown', (e) => { e.preventDefault(); moveLane(-1); });
+document.getElementById('btn-right').addEventListener('pointerdown', (e) => { e.preventDefault(); moveLane(1); });
+
+let touchStartX = null;
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const x = touch.clientX - rect.left;
+  if (state !== 'playing') { handleAction(); return; }
+  touchStartX = x;
+});
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (touchStartX !== null && state === 'playing') {
+    const touch = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const dx = x - touchStartX;
+    if (Math.abs(dx) > 20) moveLane(dx > 0 ? 1 : -1);
+  }
+  touchStartX = null;
+});
+
+canvas.addEventListener('click', () => {
+  if (state !== 'playing') handleAction();
+});
+
+function handleAction() {
+  if (state === 'title') startRound();
+  else if (state === 'roundEnd') {
+    if (round < MAX_ROUNDS) { round++; startRound(); }
+    else state = 'gameOver';
+  } else if (state === 'gameOver') {
+    round = 1; score = 0; bladderIQ = 50;
+    combo = 0; maxCombo = 0; totalCollected = 0;
+    state = 'title';
+  }
+}
+
+function startRound() {
+  state = 'playing';
+  items = [];
+  particles = [];
+  roundTimer = ROUND_DURATION;
+  spawnTimer = 0;
+  playerLane = 1;
+  itemSpeed = ITEM_SPEED_BASE + (round - 1) * ITEM_SPEED_INCREMENT;
+  spawnInterval = Math.max(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_BASE - (round - 1) * 60);
+  combo = 0;
+}
+
+// --- UPDATE ---
+function update(dt) {
+  if (state !== 'playing') return;
+
+  roundTimer -= dt / 1000;
+  if (roundTimer <= 0) { state = 'roundEnd'; return; }
+
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) {
+    spawnItem();
+    spawnTimer = spawnInterval + (Math.random() - 0.5) * 200;
+  }
+
+  for (let item of items) item.y += itemSpeed * (dt / 16);
+
+  const px = playerX();
+  const py = playerY();
+  for (let item of items) {
+    if (item.collected) continue;
+    const ix = item.lane * LANE_W + LANE_W / 2;
+    const iy = item.y;
+    if (Math.abs(ix - px) < LANE_W * 0.6 && Math.abs(iy - py) < PLAYER_SIZE) {
+      item.collected = true;
+      score += item.points * (1 + Math.floor(combo / 5) * 0.5);
+      bladderIQ = Math.max(0, Math.min(100, bladderIQ + (item.good ? 3 : -5)));
+      if (item.good) {
+        combo++; maxCombo = Math.max(maxCombo, combo); totalCollected++;
+        addParticles(ix, iy, COL.green, 8);
+        flashColor = 'rgba(92,255,130,0.12)';
+      } else {
+        combo = 0; shakeTimer = 200;
+        addParticles(ix, iy, COL.red, 10);
+        flashColor = 'rgba(255,92,92,0.12)';
+      }
+      flashTimer = 150;
+    }
+  }
+
+  items = items.filter(item => {
+    if (item.y > canvas.height + ITEM_SIZE && !item.collected) {
+      if (!item.good) { totalDodged++; score += 5; }
+      return false;
+    }
+    return !item.collected;
+  });
+
+  for (let p of particles) {
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.15; p.life -= dt / 500;
+  }
+  particles = particles.filter(p => p.life > 0);
+
+  if (shakeTimer > 0) shakeTimer -= dt;
+  if (flashTimer > 0) flashTimer -= dt;
+  score = Math.max(0, Math.round(score));
+}
+
+// --- DRAW ---
+function drawBackground() {
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, COL.bgTop);
+  grad.addColorStop(1, COL.bgBot);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Lane dividers
+  ctx.strokeStyle = COL.lane;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([10, 10]);
+  for (let i = 1; i < LANES; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * LANE_W, 0);
+    ctx.lineTo(i * LANE_W, canvas.height);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Subtle scanlines
+  ctx.fillStyle = COL.scanline;
+  for (let y = 0; y < canvas.height; y += 4) ctx.fillRect(0, y, canvas.width, 1);
+}
+
+function drawPlayer() {
+  const x = playerX();
+  const y = playerY();
+  // Bright glow
+  const glow = ctx.createRadialGradient(x, y, 4, x, y, 40);
+  glow.addColorStop(0, 'rgba(92,224,255,0.5)');
+  glow.addColorStop(1, 'rgba(92,224,255,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - 40, y - 40, 80, 80);
+  // Emoji
+  ctx.font = `${PLAYER_SIZE}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('💙', x, y);
+  // Lane highlight
+  ctx.fillStyle = 'rgba(92,224,255,0.06)';
+  ctx.fillRect(playerLane * LANE_W, 0, LANE_W, canvas.height);
+}
+
+function drawItems() {
+  ctx.font = `${ITEM_SIZE}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let item of items) {
+    const x = item.lane * LANE_W + LANE_W / 2;
+    ctx.shadowColor = item.good ? COL.green : COL.red;
+    ctx.shadowBlur = 14;
+    ctx.fillText(item.emoji, x, item.y);
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawParticles() {
+  for (let p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // BladderIQ meter
+  const barW = 150; const barH = 18;
+  const barX = 14; const barY = 14;
+  // Track bg
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  roundedRect(ctx, barX, barY, barW, barH, 4);
+  ctx.fill();
+  // Fill
+  const pct = bladderIQ / 100;
+  const barCol = pct > 0.6 ? COL.green : pct > 0.3 ? COL.yellow : COL.red;
+  ctx.fillStyle = barCol;
+  roundedRect(ctx, barX, barY, barW * pct, barH, 4);
+  ctx.fill();
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  roundedRect(ctx, barX, barY, barW, barH, 4);
+  ctx.stroke();
+  // Label
+  ctx.font = 'bold 13px Courier New';
+  ctx.fillStyle = COL.hud;
+  ctx.textAlign = 'left';
+  ctx.fillText(`BladderIQ  ${bladderIQ}`, barX + 4, barY + barH + 16);
+
+  // Score
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 22px Courier New';
+  ctx.fillStyle = COL.yellow;
+  ctx.fillText(`${score}`, canvas.width - 14, 30);
+  ctx.font = 'bold 12px Courier New';
+  ctx.fillStyle = COL.dimWhite;
+  ctx.fillText('SCORE', canvas.width - 14, 46);
+
+  // Timer
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 20px Courier New';
+  const t = Math.max(0, Math.ceil(roundTimer));
+  ctx.fillStyle = t <= 5 ? COL.red : COL.hud;
+  ctx.fillText(`${t}s`, canvas.width / 2, 30);
+  ctx.font = 'bold 12px Courier New';
+  ctx.fillStyle = COL.dimWhite;
+  ctx.fillText(`ROUND ${round}/${MAX_ROUNDS}`, canvas.width / 2, 46);
+
+  // Combo
+  if (combo >= 3) {
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 18px Courier New';
+    ctx.fillStyle = COL.green;
+    ctx.fillText(`🔥 x${combo}`, 14, 68);
+  }
+}
+
+function roundedRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.lineTo(x + w - r, y);
+  c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r);
+  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h);
+  c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r);
+  c.quadraticCurveTo(x, y, x + r, y);
+  c.closePath();
+}
+
+function drawQR(cx, cy, size) {
+  if (qrLoaded) {
+    // White background for QR readability
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - size/2 - 6, cy - size/2 - 6, size + 12, size + 12);
+    ctx.drawImage(qrImg, cx - size/2, cy - size/2, size, size);
+  } else {
+    ctx.strokeStyle = COL.yellow;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - size/2, cy - size/2, size, size);
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillStyle = COL.dimWhite;
+    ctx.textAlign = 'center';
+    ctx.fillText('[ QR CODE ]', cx, cy - 6);
+    ctx.font = '12px Courier New';
+    ctx.fillText('Place qr.png in folder', cx, cy + 14);
+  }
+}
+
+function drawTitle() {
+  ctx.fillStyle = COL.overlay;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.textAlign = 'center';
+
+  // Title with glow
+  ctx.shadowColor = COL.yellow;
+  ctx.shadowBlur = 20;
+  ctx.font = 'bold 48px Courier New';
+  ctx.fillStyle = COL.yellow;
+  ctx.fillText('BLADDER', canvas.width/2, 130);
+  ctx.fillText('DASH', canvas.width/2, 185);
+  ctx.shadowBlur = 0;
+
+  // Subtitle
+  ctx.font = 'bold 14px Courier New';
+  ctx.fillStyle = COL.cyan;
+  ctx.fillText('— A BladderIQ Game —', canvas.width/2, 218);
+
+  // Instructions
+  ctx.font = '18px Courier New';
+  ctx.fillStyle = COL.green;
+  ctx.fillText('Collect  💧 🥦 🏃 🧘', canvas.width/2, 275);
+  ctx.fillStyle = COL.red;
+  ctx.fillText('Dodge   ☕ 🍺 🌶️ 🚫', canvas.width/2, 310);
+
+  ctx.font = '14px Courier New';
+  ctx.fillStyle = COL.dimWhite;
+  ctx.fillText('← →  Arrow Keys  /  Swipe  /  Tap', canvas.width/2, 365);
+
+  // Blink CTA
+  if (Math.floor(Date.now() / 500) % 2 === 0) {
+    ctx.font = 'bold 22px Courier New';
+    ctx.fillStyle = COL.hud;
+    ctx.fillText('TAP TO START', canvas.width/2, 440);
+  }
+
+  ctx.font = 'bold 14px Courier New';
+  ctx.fillStyle = COL.pink;
+  ctx.fillText('by BladderIQ', canvas.width/2, 560);
+}
+
+function drawRoundEnd() {
+  ctx.fillStyle = COL.overlay;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.textAlign = 'center';
+
+  ctx.shadowColor = COL.green;
+  ctx.shadowBlur = 16;
+  ctx.font = 'bold 30px Courier New';
+  ctx.fillStyle = COL.green;
+  ctx.fillText(`ROUND ${round} COMPLETE`, canvas.width/2, 80);
+  ctx.shadowBlur = 0;
+
+  ctx.font = 'bold 20px Courier New';
+  ctx.fillStyle = COL.yellow;
+  ctx.fillText(`Score: ${score}`, canvas.width/2, 135);
+  ctx.font = '18px Courier New';
+  ctx.fillStyle = COL.hud;
+  ctx.fillText(`BladderIQ: ${bladderIQ}/100`, canvas.width/2, 170);
+  ctx.fillStyle = COL.cyan;
+  ctx.fillText(`Best Combo: x${maxCombo}`, canvas.width/2, 200);
+
+  // QR
+  drawQR(canvas.width/2, 310, 120);
+
+  ctx.font = 'bold 16px Courier New';
+  ctx.fillStyle = COL.yellow;
+  ctx.fillText('Download BladderIQ', canvas.width/2, 400);
+
+  if (Math.floor(Date.now() / 500) % 2 === 0) {
+    ctx.font = 'bold 20px Courier New';
+    ctx.fillStyle = COL.hud;
+    ctx.fillText(round < MAX_ROUNDS ? 'TAP FOR NEXT ROUND' : 'TAP TO FINISH', canvas.width/2, 480);
+  }
+}
+
+function drawGameOver() {
+  ctx.fillStyle = COL.overlay;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'center';
+
+  ctx.shadowColor = COL.yellow;
+  ctx.shadowBlur = 20;
+  ctx.font = 'bold 40px Courier New';
+  ctx.fillStyle = COL.yellow;
+  ctx.fillText('GAME OVER', canvas.width/2, 90);
+  ctx.shadowBlur = 0;
+
+  ctx.font = 'bold 22px Courier New';
+  ctx.fillStyle = COL.hud;
+  ctx.fillText(`Final Score: ${score}`, canvas.width/2, 145);
+
+  const grade = bladderIQ >= 80 ? 'A+' : bladderIQ >= 60 ? 'A' : bladderIQ >= 40 ? 'B' : bladderIQ >= 20 ? 'C' : 'D';
+  ctx.font = 'bold 56px Courier New';
+  ctx.fillStyle = bladderIQ >= 60 ? COL.green : bladderIQ >= 30 ? COL.yellow : COL.red;
+  ctx.shadowColor = ctx.fillStyle;
+  ctx.shadowBlur = 18;
+  ctx.fillText(grade, canvas.width/2, 220);
+  ctx.shadowBlur = 0;
+  ctx.font = 'bold 14px Courier New';
+  ctx.fillStyle = COL.dimWhite;
+  ctx.fillText('BladderIQ Grade', canvas.width/2, 250);
+
+  // CTA
+  ctx.font = 'bold 18px Courier New';
+  ctx.fillStyle = COL.green;
+  ctx.fillText('Track your REAL', canvas.width/2, 300);
+  ctx.fillText('BladderIQ score', canvas.width/2, 325);
+
+  drawQR(canvas.width/2, 420, 120);
+
+  if (Math.floor(Date.now() / 500) % 2 === 0) {
+    ctx.font = 'bold 18px Courier New';
+    ctx.fillStyle = COL.hud;
+    ctx.fillText('TAP TO RESTART', canvas.width/2, 530);
+  }
+}
+
+// --- MAIN LOOP ---
+function gameLoop(timestamp) {
+  const dt = lastTime ? Math.min(timestamp - lastTime, 50) : 16;
+  lastTime = timestamp;
+
+  update(dt);
+
+  ctx.save();
+  if (shakeTimer > 0) {
+    ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+  }
+
+  drawBackground();
+
+  if (state === 'playing') {
+    drawItems();
+    drawPlayer();
+    drawParticles();
+    drawHUD();
+    if (flashTimer > 0 && flashColor) {
+      ctx.fillStyle = flashColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  } else if (state === 'title') {
+    drawTitle();
+  } else if (state === 'roundEnd') {
+    drawRoundEnd();
+  } else if (state === 'gameOver') {
+    drawGameOver();
+  }
+
+  ctx.restore();
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
