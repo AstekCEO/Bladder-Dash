@@ -7,24 +7,25 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #141c3a;
+    background: #e8f0f8;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
     font-family: 'Courier New', monospace;
-    color: #f0f0f0;
+    color: #1a3a5c;
     overflow: hidden;
   }
   canvas {
-    border: 3px solid #ffd640;
-    border-radius: 8px;
+    border: 3px solid #2a7ab5;
+    border-radius: 12px;
     display: block;
     image-rendering: pixelated;
     max-width: 100vw;
     max-height: 80vh;
     touch-action: none;
+    box-shadow: 0 4px 24px rgba(42,122,181,0.2);
   }
   #controls {
     display: flex;
@@ -34,9 +35,9 @@
   .ctrl-btn {
     width: 70px; height: 70px;
     border-radius: 50%;
-    border: 3px solid #ffd640;
-    background: rgba(255,214,64,0.2);
-    color: #ffd640;
+    border: 3px solid #2a7ab5;
+    background: rgba(42,122,181,0.12);
+    color: #2a7ab5;
     font-size: 32px;
     font-weight: bold;
     cursor: pointer;
@@ -47,7 +48,7 @@
     -webkit-user-select: none;
     transition: background 0.1s;
   }
-  .ctrl-btn:active { background: rgba(255,214,64,0.5); }
+  .ctrl-btn:active { background: rgba(42,122,181,0.3); }
 </style>
 </head>
 <body>
@@ -65,19 +66,19 @@ const ctx = canvas.getContext('2d');
 
 // --- PALETTE (high-contrast retro) ---
 const COL = {
-  bgTop:     '#1e2d5a',
-  bgBot:     '#2c4080',
-  lane:      'rgba(255,255,255,0.25)',
+  bgTop:     '#dceaf6',
+  bgBot:     '#c4ddf0',
+  lane:      'rgba(42,122,181,0.15)',
   scanline:  'rgba(0,0,0,0.0)',
-  yellow:    '#ffdd00',
-  red:       '#ff4444',
-  green:     '#44ff88',
-  cyan:      '#44ddff',
-  pink:      '#ff66aa',
-  white:     '#ffffff',
-  dimWhite:  'rgba(255,255,255,0.90)',
-  hud:       '#ffffff',
-  overlay:   'rgba(10,15,40,0.88)',
+  yellow:    '#2a7ab5',    // primary blue (used for accents)
+  red:       '#d94452',    // soft medical red
+  green:     '#2eab6f',    // soft medical green
+  cyan:      '#2a9fd6',    // bright medical blue
+  pink:      '#c05088',
+  white:     '#1a3a5c',    // dark navy text
+  dimWhite:  'rgba(26,58,92,0.70)',
+  hud:       '#1a3a5c',
+  overlay:   'rgba(220,234,246,0.94)',
 };
 
 // --- CONFIG ---
@@ -262,11 +263,11 @@ function update(dt) {
       if (item.good) {
         combo++; maxCombo = Math.max(maxCombo, combo); totalCollected++;
         addParticles(ix, iy, COL.green, 8);
-        flashColor = 'rgba(92,255,130,0.12)';
+        flashColor = 'rgba(46,171,111,0.12)';
       } else {
         combo = 0; shakeTimer = 200;
         addParticles(ix, iy, COL.red, 10);
-        flashColor = 'rgba(255,92,92,0.12)';
+        flashColor = 'rgba(217,68,82,0.12)';
       }
       flashTimer = 150;
     }
@@ -321,8 +322,8 @@ function drawPlayer() {
   const y = playerY();
   // Bright glow
   const glow = ctx.createRadialGradient(x, y, 4, x, y, 40);
-  glow.addColorStop(0, 'rgba(120,240,255,0.7)');
-  glow.addColorStop(1, 'rgba(120,240,255,0)');
+  glow.addColorStop(0, 'rgba(42,122,181,0.4)');
+  glow.addColorStop(1, 'rgba(42,122,181,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(x - 40, y - 40, 80, 80);
   // Emoji
@@ -331,31 +332,17 @@ function drawPlayer() {
   ctx.textBaseline = 'middle';
   ctx.fillText('💙', x, y);
   // Lane highlight
-  ctx.fillStyle = 'rgba(120,240,255,0.15)';
+  ctx.fillStyle = 'rgba(42,122,181,0.08)';
   ctx.fillRect(playerLane * LANE_W, 0, LANE_W, canvas.height);
 }
 
 function drawItems() {
+  ctx.font = `${ITEM_SIZE}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (let item of items) {
     const x = item.lane * LANE_W + LANE_W / 2;
-    // Draw a bright backing circle so emojis pop
-    const circleColor = item.good ? 'rgba(68,255,136,0.25)' : 'rgba(255,68,68,0.25)';
-    const borderColor = item.good ? 'rgba(68,255,136,0.7)' : 'rgba(255,68,68,0.7)';
-    ctx.beginPath();
-    ctx.arc(x, item.y, 28, 0, Math.PI * 2);
-    ctx.fillStyle = circleColor;
-    ctx.fill();
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    // Glow
-    ctx.shadowColor = item.good ? COL.green : COL.red;
-    ctx.shadowBlur = 20;
-    ctx.font = `${ITEM_SIZE}px serif`;
     ctx.fillText(item.emoji, x, item.y);
-    ctx.shadowBlur = 0;
   }
 }
 
@@ -375,7 +362,7 @@ function drawHUD() {
   const barW = 150; const barH = 18;
   const barX = 14; const barY = 14;
   // Track bg
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillStyle = 'rgba(42,122,181,0.15)';
   roundedRect(ctx, barX, barY, barW, barH, 4);
   ctx.fill();
   // Fill
@@ -385,7 +372,7 @@ function drawHUD() {
   roundedRect(ctx, barX, barY, barW * pct, barH, 4);
   ctx.fill();
   // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.strokeStyle = 'rgba(42,122,181,0.5)';
   ctx.lineWidth = 1;
   roundedRect(ctx, barX, barY, barW, barH, 4);
   ctx.stroke();
