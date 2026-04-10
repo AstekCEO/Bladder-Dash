@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #0d1117;
+    background: #141c3a;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -65,19 +65,19 @@ const ctx = canvas.getContext('2d');
 
 // --- PALETTE (high-contrast retro) ---
 const COL = {
-  bgTop:     '#0f1628',
-  bgBot:     '#1c2444',
-  lane:      'rgba(255,220,80,0.22)',
-  scanline:  'rgba(0,0,0,0.04)',
-  yellow:    '#ffd640',
-  red:       '#ff5c5c',
-  green:     '#5cff82',
-  cyan:      '#5ce0ff',
-  pink:      '#ff80b0',
-  white:     '#f0f4ff',
-  dimWhite:  'rgba(240,244,255,0.65)',
+  bgTop:     '#1e2d5a',
+  bgBot:     '#2c4080',
+  lane:      'rgba(255,255,255,0.25)',
+  scanline:  'rgba(0,0,0,0.0)',
+  yellow:    '#ffdd00',
+  red:       '#ff4444',
+  green:     '#44ff88',
+  cyan:      '#44ddff',
+  pink:      '#ff66aa',
+  white:     '#ffffff',
+  dimWhite:  'rgba(255,255,255,0.90)',
   hud:       '#ffffff',
-  overlay:   'rgba(12,18,36,0.92)',
+  overlay:   'rgba(10,15,40,0.88)',
 };
 
 // --- CONFIG ---
@@ -317,8 +317,8 @@ function drawPlayer() {
   const y = playerY();
   // Bright glow
   const glow = ctx.createRadialGradient(x, y, 4, x, y, 40);
-  glow.addColorStop(0, 'rgba(92,224,255,0.5)');
-  glow.addColorStop(1, 'rgba(92,224,255,0)');
+  glow.addColorStop(0, 'rgba(120,240,255,0.7)');
+  glow.addColorStop(1, 'rgba(120,240,255,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(x - 40, y - 40, 80, 80);
   // Emoji
@@ -327,18 +327,29 @@ function drawPlayer() {
   ctx.textBaseline = 'middle';
   ctx.fillText('💙', x, y);
   // Lane highlight
-  ctx.fillStyle = 'rgba(92,224,255,0.06)';
+  ctx.fillStyle = 'rgba(120,240,255,0.15)';
   ctx.fillRect(playerLane * LANE_W, 0, LANE_W, canvas.height);
 }
 
 function drawItems() {
-  ctx.font = `${ITEM_SIZE}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (let item of items) {
     const x = item.lane * LANE_W + LANE_W / 2;
+    // Draw a bright backing circle so emojis pop
+    const circleColor = item.good ? 'rgba(68,255,136,0.25)' : 'rgba(255,68,68,0.25)';
+    const borderColor = item.good ? 'rgba(68,255,136,0.7)' : 'rgba(255,68,68,0.7)';
+    ctx.beginPath();
+    ctx.arc(x, item.y, 28, 0, Math.PI * 2);
+    ctx.fillStyle = circleColor;
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Glow
     ctx.shadowColor = item.good ? COL.green : COL.red;
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = 20;
+    ctx.font = `${ITEM_SIZE}px serif`;
     ctx.fillText(item.emoji, x, item.y);
     ctx.shadowBlur = 0;
   }
@@ -360,7 +371,7 @@ function drawHUD() {
   const barW = 150; const barH = 18;
   const barX = 14; const barY = 14;
   // Track bg
-  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
   roundedRect(ctx, barX, barY, barW, barH, 4);
   ctx.fill();
   // Fill
@@ -370,7 +381,7 @@ function drawHUD() {
   roundedRect(ctx, barX, barY, barW * pct, barH, 4);
   ctx.fill();
   // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
   ctx.lineWidth = 1;
   roundedRect(ctx, barX, barY, barW, barH, 4);
   ctx.stroke();
