@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #111;
+    background: #000;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -18,7 +18,7 @@
     overflow: hidden;
   }
   canvas {
-    border: 3px solid #00bfff;
+    border: 3px solid #00ccff;
     border-radius: 8px;
     display: block;
     max-width: 100vw;
@@ -33,9 +33,9 @@
   .ctrl-btn {
     width: 70px; height: 70px;
     border-radius: 50%;
-    border: 3px solid #00bfff;
-    background: rgba(0,191,255,0.15);
-    color: #00bfff;
+    border: 3px solid #00ccff;
+    background: rgba(0,204,255,0.15);
+    color: #00ccff;
     font-size: 32px;
     font-weight: bold;
     cursor: pointer;
@@ -46,7 +46,7 @@
     -webkit-user-select: none;
     transition: background 0.1s;
   }
-  .ctrl-btn:active { background: rgba(0,191,255,0.4); }
+  .ctrl-btn:active { background: rgba(0,204,255,0.4); }
 </style>
 </head>
 <body>
@@ -58,546 +58,291 @@
 </div>
 
 <script>
-// ==================== BLADDER DASH ====================
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// --- PALETTE (high-contrast retro) ---
-const COL = {
-  bgTop:     '#0a0a1a',
-  bgBot:     '#141428',
-  lane:      'rgba(255,255,255,0.08)',
-  scanline:  'rgba(0,0,0,0.0)',
-  yellow:    '#00bfff',
-  red:       '#ff4466',
-  green:     '#00e676',
-  cyan:      '#00bfff',
-  pink:      '#ff66aa',
-  white:     '#ffffff',
-  dimWhite:  'rgba(255,255,255,0.7)',
-  hud:       '#ffffff',
-  overlay:   'rgba(5,5,15,0.92)',
-};
+// --- PALETTE ---
+const BG1 = '#050510';
+const BG2 = '#0a0a25';
+const ACCENT = '#00ccff';
+const RED = '#ff3355';
+const GREEN = '#00ee77';
+const WHITE = '#ffffff';
+const DIM = 'rgba(255,255,255,0.6)';
 
 // --- CONFIG ---
 const LANES = 4;
 const LANE_W = canvas.width / LANES;
-const PLAYER_SIZE = 40;
-const ITEM_SIZE = 36;
+const PLAYER_SIZE = 44;
+const ITEM_SIZE = 40;
 const ITEM_SPEED_BASE = 2.5;
-const ITEM_SPEED_INCREMENT = 0.3;
-const SPAWN_INTERVAL_BASE = 700;
-const SPAWN_INTERVAL_MIN = 350;
-const ROUND_DURATION = 30;
+const ITEM_SPEED_INC = 0.3;
+const SPAWN_BASE = 700;
+const SPAWN_MIN = 350;
+const ROUND_TIME = 30;
 const MAX_ROUNDS = 5;
 
-const GOOD_ITEMS = [
-  { emoji: '💧', label: 'Water', points: 10 },
-  { emoji: '🥦', label: 'Veggies', points: 15 },
-  { emoji: '🏃', label: 'Exercise', points: 12 },
-  { emoji: '🧘', label: 'Relax', points: 8 },
+const GOOD = [
+  { emoji: '💧', label: 'Water', pts: 10 },
+  { emoji: '🥦', label: 'Veggies', pts: 15 },
+  { emoji: '🏃', label: 'Exercise', pts: 12 },
+  { emoji: '🧘', label: 'Relax', pts: 8 },
+];
+const BAD = [
+  { emoji: '☕', label: 'Caffeine', pts: -15 },
+  { emoji: '🍺', label: 'Alcohol', pts: -20 },
+  { emoji: '🌶️', label: 'Spicy', pts: -12 },
+  { emoji: '🚫', label: 'Holding It', pts: -18 },
 ];
 
-const BAD_ITEMS = [
-  { emoji: '☕', label: 'Caffeine', points: -15 },
-  { emoji: '🍺', label: 'Alcohol', points: -20 },
-  { emoji: '🌶️', label: 'Spicy', points: -12 },
-  { emoji: '🚫', label: 'Holding It', points: -18 },
-];
-
-// --- QR CODE (replace src with your actual QR) ---
+// --- QR ---
 const qrImg = new Image();
 let qrLoaded = false;
 qrImg.onload = () => { qrLoaded = true; };
-// To use your QR: place qr.png in the same folder and uncomment:
-// qrImg.src = 'qr.png';
-// Or paste a data:image/png;base64,... string here:
 qrImg.src = 'data:image/png;base64,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';
 
 // --- STATE ---
 let state = 'title';
-let playerLane = 1;
-let score = 0;
-let bladderIQ = 50;
-let round = 1;
-let items = [];
-let particles = [];
-let spawnTimer = 0;
-let roundTimer = 0;
-let lastTime = 0;
-let itemSpeed = ITEM_SPEED_BASE;
-let spawnInterval = SPAWN_INTERVAL_BASE;
-let combo = 0;
-let maxCombo = 0;
-let totalCollected = 0;
-let totalDodged = 0;
-let shakeTimer = 0;
-let flashColor = null;
-let flashTimer = 0;
+let lane = 1, score = 0, biq = 50, round = 1;
+let items = [], particles = [];
+let spawnT = 0, roundT = 0, lastT = 0;
+let speed = ITEM_SPEED_BASE, spawnI = SPAWN_BASE;
+let combo = 0, maxCombo = 0;
+let shakeT = 0, flashC = null, flashT = 0;
 
-// --- HELPERS ---
-function playerX() { return playerLane * LANE_W + LANE_W / 2; }
-function playerY() { return canvas.height - 80; }
+function px() { return lane * LANE_W + LANE_W / 2; }
+function py() { return canvas.height - 80; }
 
-function moveLane(dir) {
-  if (state !== 'playing') return;
-  playerLane = Math.max(0, Math.min(LANES - 1, playerLane + dir));
+function moveLane(d) { if (state === 'playing') lane = Math.max(0, Math.min(LANES-1, lane+d)); }
+
+function spawn() {
+  const good = Math.random() < 0.55;
+  const pool = good ? GOOD : BAD;
+  const it = pool[Math.floor(Math.random() * pool.length)];
+  items.push({ ...it, lane: Math.floor(Math.random() * LANES), y: -ITEM_SIZE, good, col: false });
 }
 
-function spawnItem() {
-  const isGood = Math.random() < 0.55;
-  const pool = isGood ? GOOD_ITEMS : BAD_ITEMS;
-  const item = pool[Math.floor(Math.random() * pool.length)];
-  items.push({
-    ...item,
-    lane: Math.floor(Math.random() * LANES),
-    y: -ITEM_SIZE,
-    good: isGood,
-    collected: false,
-  });
-}
-
-function addParticles(x, y, color, count) {
-  for (let i = 0; i < count; i++) {
-    particles.push({
-      x, y,
-      vx: (Math.random() - 0.5) * 6,
-      vy: (Math.random() - 0.5) * 6 - 2,
-      life: 1,
-      color,
-      size: 3 + Math.random() * 4,
-    });
-  }
+function burst(x, y, c, n) {
+  for (let i = 0; i < n; i++)
+    particles.push({ x, y, vx: (Math.random()-.5)*6, vy: (Math.random()-.5)*6-2, life: 1, c, s: 3+Math.random()*4 });
 }
 
 // --- INPUT ---
-document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') { e.preventDefault(); moveLane(-1); }
   if (e.key === 'ArrowRight') { e.preventDefault(); moveLane(1); }
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAction(); }
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); action(); }
 });
-// Keep focus on the page so keyboard always works
 canvas.setAttribute('tabindex', '0');
 canvas.focus();
 canvas.addEventListener('blur', () => setTimeout(() => canvas.focus(), 100));
 
-document.getElementById('btn-left').addEventListener('pointerdown', (e) => { e.preventDefault(); moveLane(-1); });
-document.getElementById('btn-right').addEventListener('pointerdown', (e) => { e.preventDefault(); moveLane(1); });
+document.getElementById('btn-left').addEventListener('pointerdown', e => { e.preventDefault(); moveLane(-1); });
+document.getElementById('btn-right').addEventListener('pointerdown', e => { e.preventDefault(); moveLane(1); });
 
-let touchStartX = null;
-canvas.addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  const touch = e.touches[0];
-  const rect = canvas.getBoundingClientRect();
-  const x = touch.clientX - rect.left;
-  if (state !== 'playing') { handleAction(); return; }
-  touchStartX = x;
-});
-canvas.addEventListener('touchend', (e) => {
-  e.preventDefault();
-  if (touchStartX !== null && state === 'playing') {
-    const touch = e.changedTouches[0];
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const dx = x - touchStartX;
-    if (Math.abs(dx) > 20) moveLane(dx > 0 ? 1 : -1);
-  }
-  touchStartX = null;
-});
+let touchX = null;
+canvas.addEventListener('touchstart', e => { e.preventDefault(); if (state !== 'playing') { action(); return; } touchX = e.touches[0].clientX - canvas.getBoundingClientRect().left; });
+canvas.addEventListener('touchend', e => { e.preventDefault(); if (touchX !== null && state === 'playing') { const dx = (e.changedTouches[0].clientX - canvas.getBoundingClientRect().left) - touchX; if (Math.abs(dx) > 20) moveLane(dx > 0 ? 1 : -1); } touchX = null; });
+canvas.addEventListener('click', () => { if (state !== 'playing') action(); });
 
-canvas.addEventListener('click', () => {
-  if (state !== 'playing') handleAction();
-});
-
-function handleAction() {
+function action() {
   if (state === 'title') startRound();
-  else if (state === 'roundEnd') {
-    if (round < MAX_ROUNDS) { round++; startRound(); }
-    else state = 'gameOver';
-  } else if (state === 'gameOver') {
-    round = 1; score = 0; bladderIQ = 50;
-    combo = 0; maxCombo = 0; totalCollected = 0;
-    state = 'title';
-  }
+  else if (state === 'roundEnd') { if (round < MAX_ROUNDS) { round++; startRound(); } else state = 'gameOver'; }
+  else if (state === 'gameOver') { round = 1; score = 0; biq = 50; combo = 0; maxCombo = 0; state = 'title'; }
 }
 
 function startRound() {
-  state = 'playing';
-  items = [];
-  particles = [];
-  roundTimer = ROUND_DURATION;
-  spawnTimer = 0;
-  playerLane = 1;
-  itemSpeed = ITEM_SPEED_BASE + (round - 1) * ITEM_SPEED_INCREMENT;
-  spawnInterval = Math.max(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_BASE - (round - 1) * 60);
-  combo = 0;
+  state = 'playing'; items = []; particles = []; roundT = ROUND_TIME; spawnT = 0; lane = 1; combo = 0;
+  speed = ITEM_SPEED_BASE + (round-1) * ITEM_SPEED_INC;
+  spawnI = Math.max(SPAWN_MIN, SPAWN_BASE - (round-1) * 60);
 }
 
 // --- UPDATE ---
 function update(dt) {
   if (state !== 'playing') return;
+  roundT -= dt / 1000;
+  if (roundT <= 0) { state = 'roundEnd'; return; }
 
-  roundTimer -= dt / 1000;
-  if (roundTimer <= 0) { state = 'roundEnd'; return; }
+  spawnT -= dt;
+  if (spawnT <= 0) { spawn(); spawnT = spawnI + (Math.random()-.5)*200; }
 
-  spawnTimer -= dt;
-  if (spawnTimer <= 0) {
-    spawnItem();
-    spawnTimer = spawnInterval + (Math.random() - 0.5) * 200;
-  }
+  for (let it of items) it.y += speed * (dt / 16);
 
-  for (let item of items) item.y += itemSpeed * (dt / 16);
-
-  const px = playerX();
-  const py = playerY();
-  for (let item of items) {
-    if (item.collected) continue;
-    const ix = item.lane * LANE_W + LANE_W / 2;
-    const iy = item.y;
-    if (Math.abs(ix - px) < LANE_W * 0.6 && Math.abs(iy - py) < PLAYER_SIZE) {
-      item.collected = true;
-      score += item.points * (1 + Math.floor(combo / 5) * 0.5);
-      bladderIQ = Math.max(0, Math.min(100, bladderIQ + (item.good ? 3 : -5)));
-      if (item.good) {
-        combo++; maxCombo = Math.max(maxCombo, combo); totalCollected++;
-        addParticles(ix, iy, COL.green, 8);
-        flashColor = 'rgba(0,230,118,0.15)';
-      } else {
-        combo = 0; shakeTimer = 200;
-        addParticles(ix, iy, COL.red, 10);
-        flashColor = 'rgba(255,68,102,0.15)';
-      }
-      flashTimer = 150;
+  const ppx = px(), ppy = py();
+  for (let it of items) {
+    if (it.col) continue;
+    const ix = it.lane * LANE_W + LANE_W / 2;
+    if (Math.abs(ix - ppx) < LANE_W * 0.6 && Math.abs(it.y - ppy) < PLAYER_SIZE) {
+      it.col = true;
+      score += it.pts * (1 + Math.floor(combo/5)*0.5);
+      biq = Math.max(0, Math.min(100, biq + (it.good ? 3 : -5)));
+      if (it.good) { combo++; maxCombo = Math.max(maxCombo, combo); burst(ix, it.y, GREEN, 8); flashC = 'rgba(0,238,119,0.15)'; }
+      else { combo = 0; shakeT = 200; burst(ix, it.y, RED, 10); flashC = 'rgba(255,51,85,0.15)'; }
+      flashT = 150;
     }
   }
 
-  items = items.filter(item => {
-    if (item.y > canvas.height + ITEM_SIZE && !item.collected) {
-      if (!item.good) { totalDodged++; score += 5; }
-      return false;
-    }
-    return !item.collected;
+  items = items.filter(it => {
+    if (it.y > canvas.height + ITEM_SIZE && !it.col) { if (!it.good) score += 5; return false; }
+    return !it.col;
   });
 
-  for (let p of particles) {
-    p.x += p.vx; p.y += p.vy;
-    p.vy += 0.15; p.life -= dt / 500;
-  }
+  for (let p of particles) { p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= dt/500; }
   particles = particles.filter(p => p.life > 0);
-
-  if (shakeTimer > 0) shakeTimer -= dt;
-  if (flashTimer > 0) flashTimer -= dt;
+  if (shakeT > 0) shakeT -= dt;
+  if (flashT > 0) flashT -= dt;
   score = Math.max(0, Math.round(score));
 }
 
-// --- DRAW ---
-function drawBackground() {
-  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grad.addColorStop(0, COL.bgTop);
-  grad.addColorStop(1, COL.bgBot);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+// --- DRAW HELPERS ---
+function text(str, x, y, font, color, align) {
+  ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(str, x, y);
+}
 
-  // Lane dividers
-  ctx.strokeStyle = COL.lane;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([10, 10]);
-  for (let i = 1; i < LANES; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * LANE_W, 0);
-    ctx.lineTo(i * LANE_W, canvas.height);
-    ctx.stroke();
+function rrect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h); ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r); ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+
+function drawQR(cx, cy, sz) {
+  if (qrLoaded) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(cx-sz/2-6, cy-sz/2-6, sz+12, sz+12);
+    ctx.drawImage(qrImg, cx-sz/2, cy-sz/2, sz, sz);
+  } else {
+    ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
+    ctx.strokeRect(cx-sz/2, cy-sz/2, sz, sz);
+    text('[ QR CODE ]', cx, cy-6, 'bold 14px Courier New', DIM);
+    text('Place qr.png in folder', cx, cy+14, '12px Courier New', DIM);
   }
-  ctx.setLineDash([]);
+}
 
-  // Subtle scanlines
-  ctx.fillStyle = COL.scanline;
-  for (let y = 0; y < canvas.height; y += 4) ctx.fillRect(0, y, canvas.width, 1);
+// --- DRAW ---
+function drawBG() {
+  const g = ctx.createLinearGradient(0,0,0,canvas.height);
+  g.addColorStop(0, BG1); g.addColorStop(1, BG2);
+  ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1; ctx.setLineDash([10,10]);
+  for (let i = 1; i < LANES; i++) { ctx.beginPath(); ctx.moveTo(i*LANE_W,0); ctx.lineTo(i*LANE_W,canvas.height); ctx.stroke(); }
+  ctx.setLineDash([]);
 }
 
 function drawPlayer() {
-  const x = playerX();
-  const y = playerY();
-  // Bright glow
-  const glow = ctx.createRadialGradient(x, y, 4, x, y, 40);
-  glow.addColorStop(0, 'rgba(0,191,255,0.6)');
-  glow.addColorStop(1, 'rgba(0,191,255,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(x - 40, y - 40, 80, 80);
-  // Emoji
-  ctx.font = `${PLAYER_SIZE}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  const x = px(), y = py();
+  const gl = ctx.createRadialGradient(x,y,4,x,y,40);
+  gl.addColorStop(0, 'rgba(0,204,255,0.5)'); gl.addColorStop(1, 'rgba(0,204,255,0)');
+  ctx.fillStyle = gl; ctx.fillRect(x-40,y-40,80,80);
+  ctx.fillStyle = 'rgba(0,204,255,0.06)'; ctx.fillRect(lane*LANE_W,0,LANE_W,canvas.height);
+  ctx.font = PLAYER_SIZE + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('💙', x, y);
-  // Lane highlight
-  ctx.fillStyle = 'rgba(0,191,255,0.08)';
-  ctx.fillRect(playerLane * LANE_W, 0, LANE_W, canvas.height);
 }
 
 function drawItems() {
-  ctx.font = `${ITEM_SIZE}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  for (let item of items) {
-    const x = item.lane * LANE_W + LANE_W / 2;
-    ctx.fillText(item.emoji, x, item.y);
+  ctx.font = ITEM_SIZE + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let it of items) {
+    const x = it.lane * LANE_W + LANE_W / 2;
+    // Drop shadow so emoji pops on dark bg
+    ctx.shadowColor = it.good ? GREEN : RED;
+    ctx.shadowBlur = 12;
+    ctx.fillText(it.emoji, x, it.y);
+    ctx.shadowBlur = 0;
   }
 }
 
 function drawParticles() {
   for (let p of particles) {
     ctx.globalAlpha = Math.max(0, p.life);
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, p.s*p.life, 0, Math.PI*2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
 
 function drawHUD() {
-  // BladderIQ meter
-  const barW = 150; const barH = 18;
-  const barX = 14; const barY = 14;
-  // Track bg
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  roundedRect(ctx, barX, barY, barW, barH, 4);
-  ctx.fill();
-  // Fill
-  const pct = bladderIQ / 100;
-  const barCol = pct > 0.6 ? COL.green : pct > 0.3 ? COL.yellow : COL.red;
-  ctx.fillStyle = barCol;
-  roundedRect(ctx, barX, barY, barW * pct, barH, 4);
-  ctx.fill();
-  // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 1;
-  roundedRect(ctx, barX, barY, barW, barH, 4);
-  ctx.stroke();
-  // Label
-  ctx.font = 'bold 13px Courier New';
-  ctx.fillStyle = COL.hud;
-  ctx.textAlign = 'left';
-  ctx.fillText(`BladderIQ  ${bladderIQ}`, barX + 4, barY + barH + 16);
+  // BladderIQ bar
+  const bw=150, bh=16, bx=14, by=14;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; rrect(bx,by,bw,bh,4); ctx.fill();
+  const pct = biq/100;
+  ctx.fillStyle = pct > 0.6 ? GREEN : pct > 0.3 ? ACCENT : RED; rrect(bx,by,bw*pct,bh,4); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; rrect(bx,by,bw,bh,4); ctx.stroke();
+  text('BladderIQ  ' + biq, bx+4, by+bh+16, 'bold 13px Courier New', WHITE, 'left');
 
   // Score
-  ctx.textAlign = 'right';
-  ctx.font = 'bold 22px Courier New';
-  ctx.fillStyle = COL.yellow;
-  ctx.fillText(`${score}`, canvas.width - 14, 30);
-  ctx.font = 'bold 12px Courier New';
-  ctx.fillStyle = COL.dimWhite;
-  ctx.fillText('SCORE', canvas.width - 14, 46);
+  text(score+'', canvas.width-14, 26, 'bold 22px Courier New', ACCENT, 'right');
+  text('SCORE', canvas.width-14, 46, 'bold 12px Courier New', DIM, 'right');
 
   // Timer
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 20px Courier New';
-  const t = Math.max(0, Math.ceil(roundTimer));
-  ctx.fillStyle = t <= 5 ? COL.red : COL.hud;
-  ctx.fillText(`${t}s`, canvas.width / 2, 30);
-  ctx.font = 'bold 12px Courier New';
-  ctx.fillStyle = COL.dimWhite;
-  ctx.fillText(`ROUND ${round}/${MAX_ROUNDS}`, canvas.width / 2, 46);
+  const t = Math.max(0, Math.ceil(roundT));
+  text(t+'s', canvas.width/2, 26, 'bold 20px Courier New', t <= 5 ? RED : WHITE);
+  text('ROUND '+round+'/'+MAX_ROUNDS, canvas.width/2, 46, 'bold 12px Courier New', DIM);
 
   // Combo
-  if (combo >= 3) {
-    ctx.textAlign = 'left';
-    ctx.font = 'bold 18px Courier New';
-    ctx.fillStyle = COL.green;
-    ctx.fillText(`🔥 x${combo}`, 14, 68);
-  }
-}
-
-function roundedRect(c, x, y, w, h, r) {
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.lineTo(x + w - r, y);
-  c.quadraticCurveTo(x + w, y, x + w, y + r);
-  c.lineTo(x + w, y + h - r);
-  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  c.lineTo(x + r, y + h);
-  c.quadraticCurveTo(x, y + h, x, y + h - r);
-  c.lineTo(x, y + r);
-  c.quadraticCurveTo(x, y, x + r, y);
-  c.closePath();
-}
-
-function drawQR(cx, cy, size) {
-  if (qrLoaded) {
-    // White background for QR readability
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(cx - size/2 - 6, cy - size/2 - 6, size + 12, size + 12);
-    ctx.drawImage(qrImg, cx - size/2, cy - size/2, size, size);
-  } else {
-    ctx.strokeStyle = COL.yellow;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(cx - size/2, cy - size/2, size, size);
-    ctx.font = 'bold 14px Courier New';
-    ctx.fillStyle = COL.dimWhite;
-    ctx.textAlign = 'center';
-    ctx.fillText('[ QR CODE ]', cx, cy - 6);
-    ctx.font = '12px Courier New';
-    ctx.fillText('Place qr.png in folder', cx, cy + 14);
-  }
+  if (combo >= 3) text('🔥 x'+combo, 14, 66, 'bold 18px Courier New', GREEN, 'left');
 }
 
 function drawTitle() {
-  ctx.fillStyle = COL.overlay;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.textAlign = 'center';
-
-  // Title with glow
-  ctx.shadowColor = COL.yellow;
-  ctx.shadowBlur = 20;
-  ctx.font = 'bold 48px Courier New';
-  ctx.fillStyle = COL.yellow;
-  ctx.fillText('BLADDER', canvas.width/2, 130);
-  ctx.fillText('DASH', canvas.width/2, 185);
+  ctx.fillStyle = 'rgba(5,5,16,0.94)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.shadowColor = ACCENT; ctx.shadowBlur = 30;
+  text('BLADDER', canvas.width/2, 130, 'bold 48px Courier New', ACCENT);
+  text('DASH', canvas.width/2, 185, 'bold 48px Courier New', ACCENT);
   ctx.shadowBlur = 0;
-
-  // Subtitle
-  ctx.font = 'bold 14px Courier New';
-  ctx.fillStyle = COL.cyan;
-  ctx.fillText('— A BladderIQ Game —', canvas.width/2, 218);
-
-  // Instructions
-  ctx.font = '18px Courier New';
-  ctx.fillStyle = COL.green;
-  ctx.fillText('Collect  💧 🥦 🏃 🧘', canvas.width/2, 275);
-  ctx.fillStyle = COL.red;
-  ctx.fillText('Dodge   ☕ 🍺 🌶️ 🚫', canvas.width/2, 310);
-
-  ctx.font = '14px Courier New';
-  ctx.fillStyle = COL.dimWhite;
-  ctx.fillText('← →  Arrow Keys  /  Swipe  /  Tap', canvas.width/2, 365);
-
-  // Blink CTA
-  if (Math.floor(Date.now() / 500) % 2 === 0) {
-    ctx.font = 'bold 22px Courier New';
-    ctx.fillStyle = COL.hud;
-    ctx.fillText('TAP TO START', canvas.width/2, 440);
-  }
-
-  ctx.font = 'bold 14px Courier New';
-  ctx.fillStyle = COL.pink;
-  ctx.fillText('by BladderIQ', canvas.width/2, 560);
+  text('— A BladderIQ Game —', canvas.width/2, 218, 'bold 14px Courier New', WHITE);
+  text('Collect  💧 🥦 🏃 🧘', canvas.width/2, 275, '18px Courier New', GREEN);
+  text('Dodge   ☕ 🍺 🌶️ 🚫', canvas.width/2, 310, '18px Courier New', RED);
+  text('← →  Arrow Keys  /  Swipe  /  Tap', canvas.width/2, 365, '14px Courier New', DIM);
+  if (Math.floor(Date.now()/500)%2===0) text('TAP TO START', canvas.width/2, 440, 'bold 22px Courier New', WHITE);
+  text('by BladderIQ', canvas.width/2, 560, 'bold 14px Courier New', ACCENT);
 }
 
 function drawRoundEnd() {
-  ctx.fillStyle = COL.overlay;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.textAlign = 'center';
-
-  ctx.shadowColor = COL.green;
-  ctx.shadowBlur = 16;
-  ctx.font = 'bold 30px Courier New';
-  ctx.fillStyle = COL.green;
-  ctx.fillText(`ROUND ${round} COMPLETE`, canvas.width/2, 80);
+  ctx.fillStyle = 'rgba(5,5,16,0.94)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.shadowColor = GREEN; ctx.shadowBlur = 16;
+  text('ROUND '+round+' COMPLETE', canvas.width/2, 80, 'bold 30px Courier New', GREEN);
   ctx.shadowBlur = 0;
-
-  ctx.font = 'bold 20px Courier New';
-  ctx.fillStyle = COL.yellow;
-  ctx.fillText(`Score: ${score}`, canvas.width/2, 135);
-  ctx.font = '18px Courier New';
-  ctx.fillStyle = COL.hud;
-  ctx.fillText(`BladderIQ: ${bladderIQ}/100`, canvas.width/2, 170);
-  ctx.fillStyle = COL.cyan;
-  ctx.fillText(`Best Combo: x${maxCombo}`, canvas.width/2, 200);
-
-  // QR
+  text('Score: '+score, canvas.width/2, 135, 'bold 20px Courier New', ACCENT);
+  text('BladderIQ: '+biq+'/100', canvas.width/2, 170, '18px Courier New', WHITE);
+  text('Best Combo: x'+maxCombo, canvas.width/2, 200, '18px Courier New', WHITE);
   drawQR(canvas.width/2, 310, 120);
-
-  ctx.font = 'bold 16px Courier New';
-  ctx.fillStyle = COL.yellow;
-  ctx.fillText('Download BladderIQ', canvas.width/2, 400);
-
-  if (Math.floor(Date.now() / 500) % 2 === 0) {
-    ctx.font = 'bold 20px Courier New';
-    ctx.fillStyle = COL.hud;
-    ctx.fillText(round < MAX_ROUNDS ? 'TAP FOR NEXT ROUND' : 'TAP TO FINISH', canvas.width/2, 480);
-  }
+  text('Download BladderIQ', canvas.width/2, 400, 'bold 16px Courier New', ACCENT);
+  if (Math.floor(Date.now()/500)%2===0) text(round < MAX_ROUNDS ? 'TAP FOR NEXT ROUND' : 'TAP TO FINISH', canvas.width/2, 480, 'bold 20px Courier New', WHITE);
 }
 
 function drawGameOver() {
-  ctx.fillStyle = COL.overlay;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.textAlign = 'center';
-
-  ctx.shadowColor = COL.yellow;
-  ctx.shadowBlur = 20;
-  ctx.font = 'bold 40px Courier New';
-  ctx.fillStyle = COL.yellow;
-  ctx.fillText('GAME OVER', canvas.width/2, 90);
+  ctx.fillStyle = 'rgba(5,5,16,0.94)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.shadowColor = ACCENT; ctx.shadowBlur = 20;
+  text('GAME OVER', canvas.width/2, 90, 'bold 40px Courier New', ACCENT);
   ctx.shadowBlur = 0;
-
-  ctx.font = 'bold 22px Courier New';
-  ctx.fillStyle = COL.hud;
-  ctx.fillText(`Final Score: ${score}`, canvas.width/2, 145);
-
-  const grade = bladderIQ >= 80 ? 'A+' : bladderIQ >= 60 ? 'A' : bladderIQ >= 40 ? 'B' : bladderIQ >= 20 ? 'C' : 'D';
-  ctx.font = 'bold 56px Courier New';
-  ctx.fillStyle = bladderIQ >= 60 ? COL.green : bladderIQ >= 30 ? COL.yellow : COL.red;
-  ctx.shadowColor = ctx.fillStyle;
-  ctx.shadowBlur = 18;
-  ctx.fillText(grade, canvas.width/2, 220);
+  text('Final Score: '+score, canvas.width/2, 145, 'bold 22px Courier New', WHITE);
+  const gr = biq >= 80 ? 'A+' : biq >= 60 ? 'A' : biq >= 40 ? 'B' : biq >= 20 ? 'C' : 'D';
+  const gc = biq >= 60 ? GREEN : biq >= 30 ? ACCENT : RED;
+  ctx.shadowColor = gc; ctx.shadowBlur = 18;
+  text(gr, canvas.width/2, 220, 'bold 56px Courier New', gc);
   ctx.shadowBlur = 0;
-  ctx.font = 'bold 14px Courier New';
-  ctx.fillStyle = COL.dimWhite;
-  ctx.fillText('BladderIQ Grade', canvas.width/2, 250);
-
-  // CTA
-  ctx.font = 'bold 18px Courier New';
-  ctx.fillStyle = COL.green;
-  ctx.fillText('Track your REAL', canvas.width/2, 300);
-  ctx.fillText('BladderIQ score', canvas.width/2, 325);
-
-  drawQR(canvas.width/2, 420, 120);
-
-  if (Math.floor(Date.now() / 500) % 2 === 0) {
-    ctx.font = 'bold 18px Courier New';
-    ctx.fillStyle = COL.hud;
-    ctx.fillText('TAP TO RESTART', canvas.width/2, 530);
-  }
+  text('BladderIQ Grade', canvas.width/2, 255, 'bold 14px Courier New', DIM);
+  text('Track your REAL', canvas.width/2, 305, 'bold 18px Courier New', GREEN);
+  text('BladderIQ score', canvas.width/2, 330, 'bold 18px Courier New', GREEN);
+  drawQR(canvas.width/2, 430, 120);
+  if (Math.floor(Date.now()/500)%2===0) text('TAP TO RESTART', canvas.width/2, 540, 'bold 18px Courier New', WHITE);
 }
 
-// --- MAIN LOOP ---
-function gameLoop(timestamp) {
-  const dt = lastTime ? Math.min(timestamp - lastTime, 50) : 16;
-  lastTime = timestamp;
-
+// --- LOOP ---
+function loop(ts) {
+  const dt = lastT ? Math.min(ts - lastT, 50) : 16; lastT = ts;
   update(dt);
-
   ctx.save();
-  if (shakeTimer > 0) {
-    ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
-  }
-
-  drawBackground();
-
+  if (shakeT > 0) ctx.translate((Math.random()-.5)*6, (Math.random()-.5)*6);
+  drawBG();
   if (state === 'playing') {
-    drawItems();
-    drawPlayer();
-    drawParticles();
-    drawHUD();
-    if (flashTimer > 0 && flashColor) {
-      ctx.fillStyle = flashColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-  } else if (state === 'title') {
-    drawTitle();
-  } else if (state === 'roundEnd') {
-    drawRoundEnd();
-  } else if (state === 'gameOver') {
-    drawGameOver();
-  }
-
+    drawItems(); drawPlayer(); drawParticles(); drawHUD();
+    if (flashT > 0 && flashC) { ctx.fillStyle = flashC; ctx.fillRect(0,0,canvas.width,canvas.height); }
+  } else if (state === 'title') drawTitle();
+  else if (state === 'roundEnd') drawRoundEnd();
+  else if (state === 'gameOver') drawGameOver();
   ctx.restore();
-  requestAnimationFrame(gameLoop);
+  requestAnimationFrame(loop);
 }
-
-requestAnimationFrame(gameLoop);
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
