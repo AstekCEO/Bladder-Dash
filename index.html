@@ -83,17 +83,34 @@ const ROUND_TIME = 30;
 const MAX_ROUNDS = 5;
 
 const GOOD = [
-  { icon: 'W', label: 'WATER', pts: 10, color: '#00ccff' },
-  { icon: 'V', label: 'VEG', pts: 15, color: '#00ee77' },
-  { icon: 'R', label: 'RUN', pts: 12, color: '#44ffaa' },
-  { icon: 'Z', label: 'ZEN', pts: 8, color: '#88ffcc' },
+  { emoji: '💧', label: 'Water', pts: 10 },
+  { emoji: '🥦', label: 'Veggies', pts: 15 },
+  { emoji: '🏃', label: 'Exercise', pts: 12 },
+  { emoji: '🧘', label: 'Relax', pts: 8 },
 ];
 const BAD = [
-  { icon: 'C', label: 'CAFF', pts: -15, color: '#ff3355' },
-  { icon: 'A', label: 'ALC', pts: -20, color: '#ff5533' },
-  { icon: 'S', label: 'SPCY', pts: -12, color: '#ff7744' },
-  { icon: 'H', label: 'HOLD', pts: -18, color: '#ff4466' },
+  { emoji: '☕', label: 'Caffeine', pts: -15 },
+  { emoji: '🍺', label: 'Alcohol', pts: -20 },
+  { emoji: '🌶️', label: 'Spicy', pts: -12 },
+  { emoji: '🚫', label: 'Holding It', pts: -18 },
 ];
+
+// Prerender emojis to offscreen canvases (fixes Chrome canvas emoji bug)
+const emojiCache = {};
+function prerenderEmoji(emoji, size) {
+  if (emojiCache[emoji]) return emojiCache[emoji];
+  const c = document.createElement('canvas');
+  c.width = size * 2; c.height = size * 2;
+  const x = c.getContext('2d');
+  x.font = size + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(emoji, size, size);
+  emojiCache[emoji] = c;
+  return c;
+}
+// Precache all emojis
+const ALL_EMOJI = ['💧','🥦','🏃','🧘','☕','🍺','🌶️','🚫','💙'];
+ALL_EMOJI.forEach(e => prerenderEmoji(e, 48));
 
 // --- QR ---
 const qrImg = new Image();
@@ -235,47 +252,15 @@ function drawPlayer() {
   gl.addColorStop(0, 'rgba(0,204,255,0.5)'); gl.addColorStop(1, 'rgba(0,204,255,0)');
   ctx.fillStyle = gl; ctx.fillRect(x-40,y-40,80,80);
   ctx.fillStyle = 'rgba(0,204,255,0.06)'; ctx.fillRect(lane*LANE_W,0,LANE_W,canvas.height);
-  // Player triangle/shield shape
-  ctx.beginPath();
-  ctx.moveTo(x, y - 22);
-  ctx.lineTo(x + 18, y + 14);
-  ctx.lineTo(x - 18, y + 14);
-  ctx.closePath();
-  ctx.fillStyle = ACCENT;
-  ctx.fill();
-  ctx.strokeStyle = WHITE;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.font = 'bold 12px Courier New';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = WHITE;
-  ctx.fillText('BIQ', x, y + 2);
+  const pc = prerenderEmoji('💙', 48);
+  ctx.drawImage(pc, x - 24, y - 24, 48, 48);
 }
 
 function drawItems() {
   for (let it of items) {
     const x = it.lane * LANE_W + LANE_W / 2;
-    // Colored circle
-    ctx.beginPath();
-    ctx.arc(x, it.y, 24, 0, Math.PI * 2);
-    ctx.fillStyle = it.color || (it.good ? GREEN : RED);
-    ctx.globalAlpha = 0.2;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = it.color || (it.good ? GREEN : RED);
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    // Big letter
-    ctx.font = 'bold 24px Courier New';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = it.color || (it.good ? GREEN : RED);
-    ctx.fillText(it.icon, x, it.y - 2);
-    // Small label
-    ctx.font = 'bold 9px Courier New';
-    ctx.fillStyle = WHITE;
-    ctx.fillText(it.label, x, it.y + 14);
+    const ec = prerenderEmoji(it.emoji, 48);
+    ctx.drawImage(ec, x - 24, it.y - 24, 48, 48);
   }
 }
 
@@ -306,7 +291,7 @@ function drawHUD() {
   text('ROUND '+round+'/'+MAX_ROUNDS, canvas.width/2, 46, 'bold 12px Courier New', DIM);
 
   // Combo
-  if (combo >= 3) text('COMBO x'+combo, 14, 66, 'bold 16px Courier New', GREEN, 'left');
+  if (combo >= 3) text('COMBO x'+combo+'!', 14, 66, 'bold 16px Courier New', GREEN, 'left');
 }
 
 function drawTitle() {
@@ -316,11 +301,14 @@ function drawTitle() {
   text('DASH', canvas.width/2, 185, 'bold 48px Courier New', ACCENT);
   ctx.shadowBlur = 0;
   text('— A BladderIQ Game —', canvas.width/2, 218, 'bold 14px Courier New', WHITE);
-  text('Collect: W V R Z', canvas.width/2, 270, 'bold 20px Courier New', GREEN);
-  text('Water  Veg  Run  Zen', canvas.width/2, 295, '13px Courier New', GREEN);
-  text('Dodge:  C A S H', canvas.width/2, 330, 'bold 20px Courier New', RED);
-  text('Caff  Alc  Spicy  Hold', canvas.width/2, 355, '13px Courier New', RED);
-  text('Arrow Keys  /  Swipe  /  Tap', canvas.width/2, 390, '14px Courier New', DIM);
+  // Draw emoji instructions using prerendered sprites
+  const goodE = ['💧','🥦','🏃','🧘'];
+  const badE = ['☕','🍺','🌶️','🚫'];
+  text('Collect:', canvas.width/2, 258, 'bold 16px Courier New', GREEN);
+  for (let i = 0; i < 4; i++) { const ec = prerenderEmoji(goodE[i], 48); ctx.drawImage(ec, 100 + i*60 - 16, 272, 32, 32); }
+  text('Dodge:', canvas.width/2, 322, 'bold 16px Courier New', RED);
+  for (let i = 0; i < 4; i++) { const ec = prerenderEmoji(badE[i], 48); ctx.drawImage(ec, 100 + i*60 - 16, 336, 32, 32); }
+  text('Arrow Keys  /  Swipe  /  Tap', canvas.width/2, 395, '14px Courier New', DIM);
   if (Math.floor(Date.now()/500)%2===0) text('TAP TO START', canvas.width/2, 440, 'bold 22px Courier New', WHITE);
   text('by BladderIQ', canvas.width/2, 560, 'bold 14px Courier New', ACCENT);
 }
