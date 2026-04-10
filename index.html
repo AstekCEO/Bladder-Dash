@@ -173,10 +173,14 @@ function addParticles(x, y, color, count) {
 
 // --- INPUT ---
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft') moveLane(-1);
-  if (e.key === 'ArrowRight') moveLane(1);
-  if (e.key === 'Enter' || e.key === ' ') handleAction();
+  if (e.key === 'ArrowLeft') { e.preventDefault(); moveLane(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); moveLane(1); }
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAction(); }
 });
+// Keep focus on the page so keyboard always works
+canvas.setAttribute('tabindex', '0');
+canvas.focus();
+canvas.addEventListener('blur', () => setTimeout(() => canvas.focus(), 100));
 
 document.getElementById('btn-left').addEventListener('pointerdown', (e) => { e.preventDefault(); moveLane(-1); });
 document.getElementById('btn-right').addEventListener('pointerdown', (e) => { e.preventDefault(); moveLane(1); });
